@@ -1,0 +1,177 @@
+#!/bin/bash
+
+# Clean the file
+gawk --csv 'BEGIN{OFS="\t"} {$1=$1}1' tmdb-movies.csv > modified_data_set.tsv 
+
+# ---------------------------------------------------------------------------------------
+# --  Task 1: Sắp xếp các bộ phim theo ngày phát hành giảm dần rồi lưu ra một file mới --
+# ---------------------------------------------------------------------------------------
+{
+  read -r header
+  echo "$header"
+
+  gawk -F'\t' -v OFS='\t' '
+  {
+    split($16, d, "/")
+
+    yy = d[3] + 0
+    year = (yy < 27 ? 2000 + yy : 1900 + yy)
+
+    key = sprintf("%04d%02d%02d", year, d[1], d[2])
+
+    print key, $0
+  }
+  ' | sort -t$'\t' -k1,1r | cut -f2-
+} < modified_data_set.tsv > movies_sorted_by_release_date_desc.tsv
+
+# ----------------------------------------------------------------------------------------
+# -- Task 2: Lọc ra các bộ phim có đánh giá trung bình trên 7.5 rồi lưu ra một file mới --
+# ----------------------------------------------------------------------------------------
+
+gawk --csv 'NR==1{print; next} $18 > 7.5 {print}' tmdb-movies.csv > movies_avg_rate_more_than_7.5.csv
+
+
+# --------------------------------------------------------------------------
+# -- Task 3: Tìm ra phim nào có doanh thu cao nhất và doanh thu thấp nhất --
+# --------------------------------------------------------------------------
+gawk --csv '
+NR==1 { next }
+{
+  rev = $5 + 0
+
+  if (NR==2 || rev > max_rev) {
+    max_rev = rev
+    max_movie_name = $6
+  }
+
+  if (NR==2 || rev < min_rev) {
+    min_rev = rev
+    min_movie_name = $6
+  }
+}
+
+END {
+  print "The movie named ",max_movie_name," has the highest revenue at ",max_rev
+  print "The movie named ",min_movie_name," has the highest revenue at", min_rev
+}
+' tmdb-movies.csv > revenue_min_max.txt
+
+
+# -----------------------------------------------------
+# -- Task 4: Tính tổng doanh thu tất cả các bộ phim  --
+# -----------------------------------------------------
+gawk --csv ' 
+NR==1 { next }
+{
+  if (NR!=1) {
+    total_rev += $5
+  }
+}
+END {
+  print "The total revene of all movies is", total_rev
+}
+' tmdb-movies.csv > total_rev.txt
+
+
+# ------------------------------------------------------
+# -- Task 5: Top 10 bộ phim đem về lợi nhuận cao nhất --
+# ------------------------------------------------------
+{
+  gawk --csv '
+  BEGIN { OFS="," }
+  NR==1 {
+    print "Profit", $0  
+    next 
+  }
+  {
+    profit = $5 - $4 
+    print profit, $0  
+  }
+  ' tmdb-movies.csv | 
+  {
+    read header
+    echo "$header"
+    sort -t, -k1,1nr | head -n 10
+  } 
+} > top_10_highest_profit_movies.csv
+
+
+# --------------------------------------------------------------------------------------
+# -- Task 6: Đạo diễn nào có nhiều bộ phim nhất và diễn viên nào đóng nhiều phim nhất --  
+# --------------------------------------------------------------------------------------
+
+# ===  Đạo diễn nào có nhiều bộ phim nhất ===
+{
+  gawk --csv '
+  BEGIN { OFS = "," }
+  NR==1 { next }
+  
+  {
+    n = split($9, directors, "|")
+    
+    for (i=1; i<=n;i++) {
+      count[directors[i]]++
+    }
+  }
+
+  END {
+    for (d in count) {
+      print d, count[d]
+    }
+  }
+  ' tmdb-movies.csv | sort -t, -k2,2nr | 
+  {
+    echo "Director,Count" 
+    head -n 1
+  }
+} > most_popular_director.csv 
+
+# === Diễn viên nào đóng nhiều phim nhất ===
+{
+  gawk --csv '
+  BEGIN { OFS = "," }
+  NR==1 { next }
+ 
+  {
+    n = split($7, actors, "|")
+    
+    for (i=1; i<=n;i++) {
+      count[actors[i]]++
+    }
+  }
+  
+  END {
+    for (a in count) {
+      print a, count[a]
+    }
+  }
+  ' tmdb-movies.csv | sort -t, -k2,2nr | 
+  {
+    echo "Actor,Count"
+    head -n 1
+  }
+} > most_popular_actor.csv
+
+# ---------------------------------------------------------------------
+# -- Task 7: Thống kê số lượng phim theo các thể loại (Action, Family, etc.) --
+# --------------------------------------------------------------------- 
+{
+  gawk --csv '
+  BEGIN { OFS = "," }
+  NR==1 { next }
+  
+  {
+    n = split($14, genres, "|")
+    for (i = 1; i <= n; i++) {
+      count[genres[i]]++
+    }
+  }
+  END {
+    for (g in count) {
+      print g, count[g]
+    }
+  }' tmdb-movies.csv | {
+    echo "Genre,Count"
+    sort -k2,2nr
+  }
+} > genre_count.csv
